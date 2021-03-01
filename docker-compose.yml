@@ -1,6 +1,18 @@
 version: '3.2'
 services:
   mongodb:
-    image: mongo:3
+    image: mongo:4
     ports:
       - "27017:27017"
+    depends_on:
+      - mongo-express
+
+  mongo-express:
+    image: mongo-express
+    ports:
+      - 6003:8081
+    environment:
+      ME_CONFIG_MONGODB_SERVER: mongodb
+      ME_CONFIG_MONGODB_ADMINUSERNAME: root
+      ME_CONFIG_MONGODB_ADMINPASSWORD: example
+

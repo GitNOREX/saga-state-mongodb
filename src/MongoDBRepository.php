@@ -17,11 +17,12 @@ use Broadway\Saga\State;
 use Broadway\Saga\State\Criteria;
 use Broadway\Saga\State\RepositoryException;
 use Broadway\Saga\State\RepositoryInterface;
-use Doctrine\MongoDB\Collection;
+use MongoDB\Collection;
+use MongoDB\Driver\Cursor;
 
 class MongoDBRepository implements RepositoryInterface
 {
-    private $collection;
+    private Collection $collection;
 
     public function __construct(Collection $collection)
     {
@@ -33,12 +34,12 @@ class MongoDBRepository implements RepositoryInterface
      */
     public function findOneBy(Criteria $criteria, $sagaId): ?State
     {
-        $query = $this->createQuery($criteria, $sagaId);
-        $results = $query->execute();
-        $count = count($results);
+        $cursor = $this->createQuery($criteria, $sagaId);
+        $results = $cursor->toArray();
 
+        $count = count($results);
         if (1 === $count) {
-            return State::deserialize(current($results->toArray()));
+            return State::deserialize(array_shift($results));
         }
 
         if ($count > 1) {
@@ -58,22 +59,20 @@ class MongoDBRepository implements RepositoryInterface
         $serializedState['sagaId'] = $sagaId;
         $serializedState['removed'] = $state->isDone();
 
-        $this->collection->save($serializedState);
+        $this->collection->updateOne(
+            ['_id' => $serializedState['id']],
+            ['$set' => $serializedState],
+            ['upsert' => true]
+        );
     }
 
-    private function createQuery(Criteria $criteria, $sagaId)
+    private function createQuery(Criteria $criteria, $sagaId): Cursor
     {
         $comparisons = $criteria->getComparisons();
-        $wheres = [];
-
+        $filters = ['removed' => false, 'sagaId' => $sagaId];
         foreach ($comparisons as $key => $value) {
-            $wheres['values.'.$key] = $value;
+            $filters["values.{$key}"] = $value;
         }
-
-        $queryBuilder = $this->collection->createQueryBuilder()
-            ->addAnd($wheres)
-            ->addAnd(['removed' => false, 'sagaId' => $sagaId]);
-
-        return $queryBuilder->getQuery();
+        return $this->collection->find($filters, ['typeMap' => ['root' => 'array', 'document' => 'array']]);
     }
 }

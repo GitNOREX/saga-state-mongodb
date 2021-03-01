@@ -15,33 +15,29 @@ namespace Broadway\Saga\State\MongoDB;
 
 use Broadway\Saga\State\RepositoryInterface;
 use Broadway\Saga\State\Testing\AbstractRepositoryTest;
-use Doctrine\MongoDB\Configuration;
-use Doctrine\MongoDB\Connection;
+use MongoDB\Client;
 
 class MongoDBRepositoryTest extends AbstractRepositoryTest
 {
     protected static $dbName = 'doctrine_mongodb';
-    protected $connection;
+    protected Client $client;
 
     protected function createRepository(): RepositoryInterface
     {
-        $config = new Configuration();
-        $config->setLoggerCallable(function ($msg) {});
-        $this->connection = new Connection(null, [], $config);
-        $db = $this->connection->selectDatabase(self::$dbName);
-        $coll = $db->createCollection('test');
+        $this->client = new Client(
+            'mongodb://mongodb/'
+        );
 
-        return new MongoDBRepository($coll);
+        $db = $this->client->selectDatabase(self::$dbName);
+        $db->dropCollection('test');
+        $db->createCollection('test');
+        return new MongoDBRepository($this->client->selectCollection(self::$dbName, 'test'));
     }
 
     public function tearDown(): void
     {
-        $collections = $this->connection->selectDatabase(self::$dbName)->listCollections();
-        foreach ($collections as $collection) {
-            $collection->drop();
-        }
-
-        $this->connection->close();
-        unset($this->connection);
+        $collection = $this->client->selectDatabase(self::$dbName)->selectCollection('test');
+        $collection->drop();
+        unset($this->client);
     }
 }
